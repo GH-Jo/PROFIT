@@ -28,24 +28,24 @@ class Q_ReLU(nn.Module):
         self.act_func = act_func
         self.inplace = inplace
         self.a = Parameter(torch.Tensor(1))
-        self.b = Parameter(torch.Tensor(1))
+        self.c = Parameter(torch.Tensor(1))
 
     def initialize(self, n_lv, offset, diff):
         self.n_lv = n_lv
-        self.a.data.fill_(np.log(np.exp(offset + diff)-1)) # a <- offset + diff (upper 5%)
-        self.b.data.fill_(np.log(np.exp(offset)-1)) # b <- offset (lower 5%)
+        self.a.data.fill_(np.log(np.exp(offset + diff)-1))
+        self.c.data.fill_(np.log(np.exp(offset + diff)-1))
     
     def forward(self, x):
         if self.act_func:
             x = F.relu(x, self.inplace)
+
         if self.n_lv == 0:
             return x
         else:
             a = F.softplus(self.a)
-            b = F.softplus(self.b)
-            x = x - b 
+            c = F.softplus(self.c)
             x = F.hardtanh(x / a, 0, 1)
-            x = RoundQuant.apply(x, self.n_lv) 
+            x = RoundQuant.apply(x, self.n_lv) * c
             return x 
 
         
@@ -57,8 +57,10 @@ class Q_ReLU6(Q_ReLU):
         self.n_lv = n_lv
         if offset + diff > 6:
             self.a.data.fill_(np.log(np.exp(6)-1))
+            self.c.data.fill_(np.log(np.exp(6)-1))
         else:
             self.a.data.fill_(np.log(np.exp(offset + diff)-1))
+            self.c.data.fill_(np.log(np.exp(offset + diff)-1))
 
 
 class Q_Sym(nn.Module):
@@ -66,22 +68,22 @@ class Q_Sym(nn.Module):
         super(Q_Sym, self).__init__()
         self.n_lv = 0
         self.a = Parameter(torch.Tensor(1))
-        self.b = Parameter(torch.Tensor(1))
-        
+        self.c = Parameter(torch.Tensor(1))
+
     def initialize(self, n_lv, offset, diff):
         self.n_lv = n_lv
-        self.a.data.fill_(np.log(np.exp(offset + diff)-1)) 
-        self.b.data.fill_(np.log(np.exp(offset) -1)) # b <- offset (lower 5%)
-
+        self.a.data.fill_(np.log(np.exp(offset + diff)-1))
+        self.c.data.fill_(np.log(np.exp(offset + diff)-1))
+    
     def forward(self, x):
         if self.n_lv == 0:
             return x
         else:
             a = F.softplus(self.a)
-            b = F.softplus(self.b)
-            x = x - x.sign() * b
+            c = F.softplus(self.c)
+
             x = F.hardtanh(x / a, -1, 1)
-            x = RoundQuant.apply(x, self.n_lv // 2) 
+            x = RoundQuant.apply(x, self.n_lv // 2) * c
             return x 
 
 
@@ -91,13 +93,14 @@ class Q_HSwish(nn.Module):
         self.n_lv = 0
         self.act_func = act_func
         self.a = Parameter(torch.Tensor(1))
-        self.b = Parameter(torch.Tensor(1))
+        self.b = 3/8
+        self.c = Parameter(torch.Tensor(1))
+        self.d = -3/8
 
     def initialize(self, n_lv, offset, diff):
         self.n_lv = n_lv
         self.a.data.fill_(np.log(np.exp(offset + diff)-1))
-        self.b.data.fill_(np.log(np.exp(offset) -1)) # b <- offset (lower 5%)
-        self.gamma.data.fill_(np.log(np.exp(1)-1))  # gamma <- 1
+        self.c.data.fill_(np.log(np.exp(offset + diff)-1))
     
     def forward(self, x):
         if self.act_func:
@@ -107,9 +110,11 @@ class Q_HSwish(nn.Module):
             return x
         else:
             a = F.softplus(self.a)
-            x = x - self.b
+            c = F.softplus(self.c)
+            x = x + self.b
             x = F.hardtanh(x / a, 0, 1)
-            x = RoundQuant.apply(x, self.n_lv) 
+            x = RoundQuant.apply(x, self.n_lv) * c
+            x = x + self.d
             return x 
 
 
@@ -118,28 +123,21 @@ class Q_Conv2d(nn.Conv2d):
         super(Q_Conv2d, self).__init__(*args, **kargs)
         self.n_lv = 0
         self.a = Parameter(torch.Tensor(1))
-        self.b = Parameter(torch.Tensor(1))
-        self.gamma = Parameter(torch.Tensor(1))
+        self.c = Parameter(torch.Tensor(1))
         self.weight_old = None
 
     def initialize(self, n_lv):
         self.n_lv = n_lv
         max_val = self.weight.data.abs().max().item()
         self.a.data.fill_(np.log(np.exp(max_val * 0.9)-1))
-        self.b.data.fill_(np.log(np.exp(max_val * 0.05)-1))
-        self.gamma.data.fill_(np.log(np.exp(1)-1))  # gamma <- 1
+        self.c.data.fill_(np.log(np.exp(max_val * 0.9)-1))
 
     def _weight_quant(self):
         a = F.softplus(self.a)
-        b = F.softplus(self.b)
-        gamma = F.softplus(self.gamma)
-        
-        w_sign = self.weight.sign()
-        weight = self.weight - w_sign * b
-        weight = (weight / a).abs() ** gamma
-        weight = weight * w_sign
-        weight = F.hardtanh(weight, -1, 1)
-        weight = RoundQuant.apply(weight, self.n_lv // 2) 
+        c = F.softplus(self.c)
+
+        weight = F.hardtanh(self.weight / a, -1, 1)
+        weight = RoundQuant.apply(weight, self.n_lv // 2) * c
         return weight
 
     def forward(self, x):
@@ -158,28 +156,21 @@ class Q_Linear(nn.Linear):
         super(Q_Linear, self).__init__(*args, **kargs)
         self.n_lv = 0
         self.a = Parameter(torch.Tensor(1))
-        self.b = Parameter(torch.Tensor(1))
-        self.gamma = Parameter(torch.Tensor(1))
+        self.c = Parameter(torch.Tensor(1))
         self.weight_old = None
 
     def initialize(self, n_lv):
         self.n_lv = n_lv
         max_val = self.weight.data.abs().max().item()
         self.a.data.fill_(np.log(np.exp(max_val * 0.9)-1))
-        self.b.data.fill_(np.log(np.exp(max_val * 0.05)-1))
-        self.gamma.data.fill_(np.log(np.exp(1)-1))  # gamma <- 1
+        self.c.data.fill_(np.log(np.exp(max_val * 0.9)-1))
 
     def _weight_quant(self):
         a = F.softplus(self.a)
-        b = F.softplus(self.b)
-        gamma = F.softplus(self.gamma)
+        c = F.softplus(self.c)
 
-        w_sign = self.weight.sign()
-        weight = self.weight - w_sign * b
-        weight = (weight / a).abs() ** gamma
-        weight *= w_sign
-        weight = F.hardtanh(weight, -1, 1)
-        weight = RoundQuant.apply(weight, self.n_lv // 2) 
+        weight = F.hardtanh(self.weight / a, -1, 1)
+        weight = RoundQuant.apply(weight, self.n_lv // 2)  * c
         return weight
 
     def forward(self, x):
@@ -216,7 +207,6 @@ class Q_Conv2dPad(Q_Conv2d):
 
 def initialize(model, loader, n_lv, act=False, weight=False, eps=0.05):
     def initialize_hook(module, input, output):
-        print("==> Initialize")
         if isinstance(module, (Q_ReLU, Q_Sym, Q_HSwish)) and act:
             if not isinstance(input, torch.Tensor):
                 input = input[0]
