@@ -148,13 +148,14 @@ class MobileNetV2(nn.Module):
         # make it nn.Sequential
         self.features = ops.Sequential(*features)
 
+        self.relu6 = ops.ReLU6(False)
         # building classifier
         self.classifier = nn.Sequential(
             nn.Dropout(0.2),
             ops.Linear(self.last_channel, num_classes),
         )
 
-        self.relu6 = ops.ReLU6(False)
+
 
         # weight initialization
         for m in self.modules():
