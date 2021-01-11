@@ -44,6 +44,7 @@ parser.add_argument("--stabilize", action="store_true", default=False)
 parser.add_argument("--w_bit", required=True, type=int, nargs="+")
 parser.add_argument("--a_bit", required=True, type=int, nargs="+")
 parser.add_argument("--w_profit", required=True, type=int, nargs="+")
+parser.add_argument("--pg", action="store_true")
 
 args = parser.parse_args()
 ckpt_root = args.ckpt   # "/home/eunhyeokpark/cifar10/"
@@ -192,124 +193,133 @@ if args.teacher != "none": # full-precision fine-tuning with teacher-student
     train_epochs(optimizer, args.warmup, args.ft_epoch, prefix)
 
 
-# progressive activation quantization 
-QuantOps.initialize(model, trainloader, 2**args.a_bit[0], act=True)
-if model_ema is not None:
-    QuantOps.initialize(model_ema, trainloader, 2**args.a_bit[0], act=True)
-
-for a_bit in args.a_bit:
-    prefix = phase_prefix(a_bit, w_bit)
-    print("==> Activation quantization, bit %d" % a_bit)
-    
-    for name, module in model.named_modules():
-        if isinstance(module, (QuantOps.ReLU, QuantOps.ReLU6, QuantOps.Sym, QuantOps.HSwish)):
-            module.n_lv = 2 ** a_bit
-
+if args.pg:
+    # progressive activation quantization 
+    QuantOps.initialize(model, trainloader, 2**args.a_bit[0], act=True)
     if model_ema is not None:
-        for name, module in model_ema.named_modules():
+        QuantOps.initialize(model_ema, trainloader, 2**args.a_bit[0], act=True)
+
+    for a_bit in args.a_bit:
+        prefix = phase_prefix(a_bit, w_bit)
+        print("==> Activation quantization, bit %d" % a_bit)
+        
+        for name, module in model.named_modules():
             if isinstance(module, (QuantOps.ReLU, QuantOps.ReLU6, QuantOps.Sym, QuantOps.HSwish)):
                 module.n_lv = 2 ** a_bit
 
-    if args.stabilize:
-        print("==> BN stabilize")
-        params = categorize_param(model)
-        optimizer = get_optimizer(params, train_quant=True, train_weight=False, train_bnbias=True) 
-        train_epochs(optimizer, 0, args.bn_epoch, prefix + "_bn")
+        if model_ema is not None:
+            for name, module in model_ema.named_modules():
+                if isinstance(module, (QuantOps.ReLU, QuantOps.ReLU6, QuantOps.Sym, QuantOps.HSwish)):
+                    module.n_lv = 2 ** a_bit
 
-    print("==> Fine-tuning")
-    optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
-    train_epochs(optimizer, args.warmup, args.ft_epoch, prefix)
+        if args.stabilize:
+            print("==> BN stabilize")
+            params = categorize_param(model)
+            optimizer = get_optimizer(params, train_quant=True, train_weight=False, train_bnbias=True) 
+            train_epochs(optimizer, 0, args.bn_epoch, prefix + "_bn")
 
-    if args.stabilize:
-        print("==> BN stabilize 2")
-        optimizer = get_optimizer(params, train_quant=True, train_weight=False, train_bnbias=True) 
-        train_epochs(optimizer, 0, args.bn_epoch, prefix + "_bn2")
-
-
-# progressive weight quantization
-with torch.no_grad():
-    QuantOps.initialize(model, trainloader, 2**args.w_bit[0], weight=True)
-
-    if model_ema is not None:
-        QuantOps.initialize(model_ema, trainloader, 2**args.w_bit[0], weight=True)
-
-for w_bit in args.w_bit:
-    prefix = phase_prefix(a_bit, w_bit)
-    print("==> Weight quantization, bit %d" % w_bit)
-    
-    for name, module in model.named_modules():
-        if isinstance(module, (QuantOps.Conv2d, QuantOps.Conv2dPad, QuantOps.Linear)):
-            module.n_lv = 2 ** w_bit
-
-    if model_ema is not None:
-        for name, module in model_ema.named_modules():
-            if isinstance(module, (QuantOps.Conv2d, QuantOps.Conv2dPad, QuantOps.Linear)):
-                module.n_lv = 2 ** w_bit
-
-    if args.stabilize:
-        print("==> BN stabilize")
-        params = categorize_param(model)
-        optimizer = get_optimizer(params, train_quant=True, train_weight=False, train_bnbias=True) 
-        train_epochs(optimizer, 0, args.bn_epoch, prefix + "_bn")
-
-
-    if w_bit in args.w_profit:    # PROFIT training
-        print("==> Sampling")
-        metric_map = {}
-        for name, module in model.module.named_modules():
-            if hasattr(module, "_weight_quant") and isinstance(module, nn.Conv2d):
-                metric_map[name] = 0
-
-        #if os.path.exists(os.path.join(args.ckpt, prefix + ".pkl")):
-        if os.path.exists(os.path.join(args.ckpt, prefix + ".pkl")) and False:
-            print("==> Load existed sampled map")
-            with open(os.path.join(args.ckpt, prefix + ".pkl"), "rb") as f:
-                metric_map = pickle.load(f)
-
-        else:
-            optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
-            
-            for epoch in range(args.sample_epoch):        
-                train_ts(trainloader, model, model_ema, model_t, criterion, optimizer, epoch, metric_map)  
-                acc = test(testloader, model, criterion, epoch)
-
-                if model_ema is not None:
-                    acc = test(testloader, model_ema, criterion, epoch)
-
-            with open(os.path.join(args.ckpt, prefix + ".pkl"), "wb") as f:
-                pickle.dump(metric_map, f)  
-        
-        skip_list = []
-        import operator
-        sort = sorted(metric_map.items(), key=operator.itemgetter(1), reverse=True)
-        for s in sort[0:int(len(sort) * 1/3)]:
-            skip_list.append(s[0])
-
-        skip_list_next = []
-        for s in sort[int(len(sort) * 1/3):int(len(sort) * 2/3)]:
-            skip_list_next.append(s[0])
-
-        params = categorize_param(model)
-        optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
-        train_epochs(optimizer, args.warmup, args.ft_epoch, prefix + "_ft1")
-
-        params = categorize_param(model, skip_list)
-        optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
-        train_epochs(optimizer, args.warmup, args.ft_epoch, prefix + "_ft2")
-
-        params = categorize_param(model, skip_list + skip_list_next)
-        optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
-        train_epochs(optimizer, args.warmup, args.ft_epoch, prefix + "_ft3")
-
-    else:                     
         print("==> Fine-tuning")
-        params = categorize_param(model)
         optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
         train_epochs(optimizer, args.warmup, args.ft_epoch, prefix)
 
-    if args.stabilize:
-        print("==> BN stabilize 2")
-        optimizer = get_optimizer(params, train_quant=True, train_weight=False, train_bnbias=True) 
-        train_epochs(optimizer, 0, args.bn_epoch, prefix + "_bn2")
+        if args.stabilize:
+            print("==> BN stabilize 2")
+            optimizer = get_optimizer(params, train_quant=True, train_weight=False, train_bnbias=True) 
+            train_epochs(optimizer, 0, args.bn_epoch, prefix + "_bn2")
 
-print("==> Finish training.. best accuracy is {}".format(best_acc))
+
+    # progressive weight quantization
+    with torch.no_grad():
+        QuantOps.initialize(model, trainloader, 2**args.w_bit[0], weight=True)
+
+        if model_ema is not None:
+            QuantOps.initialize(model_ema, trainloader, 2**args.w_bit[0], weight=True)
+
+    for w_bit in args.w_bit:
+        prefix = phase_prefix(a_bit, w_bit)
+        print("==> Weight quantization, bit %d" % w_bit)
+        
+        for name, module in model.named_modules():
+            if isinstance(module, (QuantOps.Conv2d, QuantOps.Conv2dPad, QuantOps.Linear)):
+                module.n_lv = 2 ** w_bit
+
+        if model_ema is not None:
+            for name, module in model_ema.named_modules():
+                if isinstance(module, (QuantOps.Conv2d, QuantOps.Conv2dPad, QuantOps.Linear)):
+                    module.n_lv = 2 ** w_bit
+
+        if args.stabilize:
+            print("==> BN stabilize")
+            params = categorize_param(model)
+            optimizer = get_optimizer(params, train_quant=True, train_weight=False, train_bnbias=True) 
+            train_epochs(optimizer, 0, args.bn_epoch, prefix + "_bn")
+
+
+        if w_bit in args.w_profit:    # PROFIT training
+            print("==> Sampling")
+            metric_map = {}
+            for name, module in model.module.named_modules():
+                if hasattr(module, "_weight_quant") and isinstance(module, nn.Conv2d):
+                    metric_map[name] = 0
+
+            #if os.path.exists(os.path.join(args.ckpt, prefix + ".pkl")):
+            if os.path.exists(os.path.join(args.ckpt, prefix + ".pkl")) and False:
+                print("==> Load existed sampled map")
+                with open(os.path.join(args.ckpt, prefix + ".pkl"), "rb") as f:
+                    metric_map = pickle.load(f)
+
+            else:
+                optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
+                
+                for epoch in range(args.sample_epoch):        
+                    train_ts(trainloader, model, model_ema, model_t, criterion, optimizer, epoch, metric_map)  
+                    acc = test(testloader, model, criterion, epoch)
+
+                    if model_ema is not None:
+                        acc = test(testloader, model_ema, criterion, epoch)
+
+                with open(os.path.join(args.ckpt, prefix + ".pkl"), "wb") as f:
+                    pickle.dump(metric_map, f)  
+            
+            skip_list = []
+            import operator
+            sort = sorted(metric_map.items(), key=operator.itemgetter(1), reverse=True)
+            for s in sort[0:int(len(sort) * 1/3)]:
+                skip_list.append(s[0])
+
+            skip_list_next = []
+            for s in sort[int(len(sort) * 1/3):int(len(sort) * 2/3)]:
+                skip_list_next.append(s[0])
+
+            params = categorize_param(model)
+            optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
+            train_epochs(optimizer, args.warmup, args.ft_epoch, prefix + "_ft1")
+
+            params = categorize_param(model, skip_list)
+            optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
+            train_epochs(optimizer, args.warmup, args.ft_epoch, prefix + "_ft2")
+
+            params = categorize_param(model, skip_list + skip_list_next)
+            optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
+            train_epochs(optimizer, args.warmup, args.ft_epoch, prefix + "_ft3")
+
+        else:                     
+            print("==> Fine-tuning")
+            params = categorize_param(model)
+            optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
+            train_epochs(optimizer, args.warmup, args.ft_epoch, prefix)
+
+        if args.stabilize:
+            print("==> BN stabilize 2")
+            optimizer = get_optimizer(params, train_quant=True, train_weight=False, train_bnbias=True) 
+            train_epochs(optimizer, 0, args.bn_epoch, prefix + "_bn2")
+
+    print("==> Finish training.. best accuracy is {}".format(best_acc))
+
+else:
+    for name, module in model.named_modules():
+        if isinstance(module, (QuantOps.ReLU, QuantOps.ReLU6, QuantOps.Sym, QuantOps.HSwish)):
+            module.n_lv = 2 ** args.a_bit[0]
+    for name, module in model.named_modules():
+        if isinstance(module, (QuantOps.Conv2d, QuantOps.Conv2dPad, QuantOps.Linear)):
+            module.n_lv = 2 ** args.w_bit[0]
