@@ -205,7 +205,7 @@ def train_ts(train_loader, model, model_ema, model_t, criterion, optimizer, epoc
             if hasattr(module, "weight_old"):
                 del module.weight_old
             module.weight_old = None
-
+    
     for i, (input, target) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
@@ -217,9 +217,9 @@ def train_ts(train_loader, model, model_ema, model_t, criterion, optimizer, epoc
         with torch.no_grad():
             input_var = torch.autograd.Variable(input)
             target_var = torch.autograd.Variable(target)
-
             if model_t is not None:
                 output_t = model_t(input_var)
+
 
         # create and attach hook for layer-wise aiwq measure
         hooks = []
@@ -260,42 +260,52 @@ def train_ts(train_loader, model, model_ema, model_t, criterion, optimizer, epoc
                     hooks.append(module.register_forward_hook(forward_hook)) 
 
         # compute output
-        output = model(input_var)
-        for hook in hooks:
-            hook.remove()
-   
-        loss_class = criterion(output, target_var)
-        if model_t is not None:
-            loss_kd = -1 * torch.mean(
-                torch.sum(torch.nn.functional.softmax(output_t, dim=1) 
-                        * torch.nn.functional.log_softmax(output, dim=1), dim=1))
-            loss = loss_class + loss_kd
-        else:
-            loss = loss_class
+        try: 
+            output = model(input_var)
+            for hook in hooks:
+                hook.remove()
+    
+            loss_class = criterion(output, target_var)
+            if model_t is not None:
+                loss_kd = -1 * torch.mean(
+                    torch.sum(torch.nn.functional.softmax(output_t, dim=1) 
+                            * torch.nn.functional.log_softmax(output, dim=1), dim=1))
+                loss = loss_class + loss_kd
+            else:
+                loss = loss_class
 
-        # measure accuracy and record loss
-        if isinstance(output, tuple):
-            prec1, prec5 = accuracy(output[0].data, target, topk=(1, 5))
-        else:
-            prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
-        losses.update(loss_class.data.item(), input.size(0))
-        top1.update(prec1.item(), input.size(0))
-        top5.update(prec5.item(), input.size(0))
+            # measure accuracy and record loss
+            if isinstance(output, tuple):
+                prec1, prec5 = accuracy(output[0].data, target, topk=(1, 5))
+            else:
+                prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
+            losses.update(loss_class.data.item(), input.size(0))
+            top1.update(prec1.item(), input.size(0))
+            top5.update(prec5.item(), input.size(0))
 
-        # store weight for next iteration update
-        for name, module in model.module.named_modules():        
-            if hasattr(module, "_weight_quant"):
-                if name in metric_map:
-                    module.weight_old = module._weight_quant().data
-                else:
-                    if hasattr(module, "weight_old"):
-                        del module.weight_old
-                    module.weight_old = None
+            # store weight for next iteration update
+            for name, module in model.module.named_modules():        
+                if hasattr(module, "_weight_quant"):
+                    if name in metric_map:
+                        module.weight_old = module._weight_quant().data
+                    else:
+                        if hasattr(module, "weight_old"):
+                            del module.weight_old
+                        module.weight_old = None
 
-        # compute gradient and do SGD step
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+            # compute gradient and do SGD step
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        except:
+            if isinstance(model, torch.nn.DataParallel):
+                model_state = model.module.state_dict()
+            else:
+                model_state = model.state_dict()
+            os.makedirs('./debug', exist_ok=True)
+            save_name = './debug/' + time.strftime("%y%m%d-%H%M_") + 'error.pth'
+            torch.save(model_state, save_name)
+            exit()
 
         # implementation of weight exponential moving-average 
         if model_ema is not None:

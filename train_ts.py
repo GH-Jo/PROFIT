@@ -148,13 +148,13 @@ def categorize_param(model, skip_list=()):
     return (quant, skip, weight, bnbias)
 
 
-def get_optimizer(params, train_quant, train_weight, train_bnbias):
+def get_optimizer(params, train_quant, train_weight, train_bnbias, lr_decay=1):
     (quant, skip, weight, bnbias) = params
     optimizer = optim.SGD([
         {'params': skip, 'weight_decay': 0, 'lr': 0},
-        {'params': quant, 'weight_decay': 0., 'lr': args.lr * 1e-2 if train_quant else 0},
-        {'params': bnbias, 'weight_decay': 0., 'lr': args.lr if train_bnbias else 0},
-        {'params': weight, 'weight_decay': args.decay, 'lr': args.lr if train_weight else 0},
+        {'params': quant, 'weight_decay': 0., 'lr': args.lr * 1e-2 * lr_decay if train_quant else 0},
+        {'params': bnbias, 'weight_decay': 0., 'lr': args.lr * lr_decay if train_bnbias else 0},
+        {'params': weight, 'weight_decay': args.decay, 'lr': args.lr * lr_decay if train_weight else 0},
     ], momentum=0.9, nesterov=True)
     return optimizer
 
@@ -244,6 +244,7 @@ if args.pg:
             train_epochs(optimizer, 0, args.bn_epoch, prefix + "_bn")
 
         print("==> Fine-tuning")
+        params = categorize_param(model)
         optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
         train_epochs(optimizer, args.warmup, args.ft_epoch, prefix)
 
@@ -339,19 +340,19 @@ if args.pg:
 
                 params = categorize_param(model)
                 optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
-                best_candi=train_epochs(optimizer, args.warmup, args.ft_epoch, prefix + "_ft5")
+                best_candi=train_epochs(optimizer, args.warmup, 1, prefix + "_ft5")
                 best_acc = max(best_acc, best_candi)
 
 
         else:                     
             print("==> Fine-tuning")
             params = categorize_param(model)
-            optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
+            optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True, lr_decay=0.5) 
             train_epochs(optimizer, args.warmup, args.ft_epoch, prefix)
 
         if args.stabilize:
             print("==> BN stabilize 2")
-            optimizer = get_optimizer(params, train_quant=True, train_weight=False, train_bnbias=True) 
+            optimizer = get_optimizer(params, train_quant=True, train_weight=False, train_bnbias=True, lr_decay=0.) 
             train_epochs(optimizer, 0, args.bn_epoch, prefix + "_bn2")
 
     print("==> Finish training.. best accuracy is {}".format(best_acc))
