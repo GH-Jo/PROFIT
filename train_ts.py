@@ -21,12 +21,13 @@ from my_lib.train_test import (
     CosineWithWarmup
 )
 import pickle
+import time
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--data", default="/SSD/ILSVRC2012")
+parser.add_argument("--data", default="/data/imagenet")
 parser.add_argument("--ckpt", required=True, help="checkpoint directory")
 
-parser.add_argument("--quant_op", choices=["duq"])
+parser.add_argument("--quant_op", choices=["duq", "qil", "lsq"])
 parser.add_argument("--model", choices=["mobilenetv2", "mobilenetv3"])
 parser.add_argument("--teacher", choices=["none", "self", "resnet101"])
 
@@ -45,6 +46,7 @@ parser.add_argument("--w_bit", required=True, type=int, nargs="+")
 parser.add_argument("--a_bit", required=True, type=int, nargs="+")
 parser.add_argument("--w_profit", required=True, type=int, nargs="+")
 parser.add_argument("--pg", action="store_true")
+parser.add_argument("--unfreeze", action="store_true")
 
 args = parser.parse_args()
 ckpt_root = args.ckpt   # "/home/eunhyeokpark/cifar10/"
@@ -53,11 +55,21 @@ use_cuda = torch.cuda.is_available()
 
 print("==> Prepare data..")
 from my_lib.imagenet import get_loader
-testloader, trainloader, _ = get_loader(data_root, test_batch=256, train_batch=256,)
+testloader, trainloader, _ = get_loader(data_root, test_batch=128, train_batch=128,)
 
 if args.quant_op == "duq":
     from quant_op.duq import QuantOps
     print("==> differentiable and unified quantization method is selected..")
+elif args.quant_op == "qil":
+    torch.autograd.set_detect_anomaly(True)
+    from quant_op.qil import QuantOps 
+    print("==> quantization interval learning method is selected..")
+elif args.quant_op == "lsq":
+    from quant_op.lsq import QuantOps
+    print("==> learning step size method is selected..")
+elif args.quant_op== 'qil_wo_offset':
+    from quant_op.qil_wo_offset import QuantOps
+    print("==> quantization interval learning without offset. ")
 else:
     raise NotImplementedError
 
@@ -72,6 +84,7 @@ elif args.model == "mobilenetv3":
     model.load_state_dict(torch.load("./pretrained/mobilenet_v3_pad.pth"), False)
 else:
     raise NotImplementedError
+print(model)
 
 print("==> Teacher model: %s" % args.teacher)
 if args.teacher == "none":
@@ -159,7 +172,18 @@ def train_epochs(optimizer, warmup_len, max_epochs, prefix):
                         max_epochs=max_epochs, eta_min=1e-3, last_epoch=last_epoch)
                         
     for epoch in range(last_epoch+1, max_epochs):
-        train_ts(trainloader, model, model_ema, model_t, criterion, optimizer, epoch)
+        start = time.time()
+        try:
+            train_ts(trainloader, model, model_ema, model_t, criterion, optimizer, epoch)
+        except:
+            if isinstance(model, torch.nn.DataParallel):
+                model_state = model.module.state_dict()
+            else:
+                model_state = model.state_dict()
+            os.makedirs('./debug', exist_ok=True)
+            save_name = './debug/' + time.strftime("%y%m%d-%H%M_") + 'error.pth'
+            torch.save(model_state, save_name)
+            exit()
         acc_base = test(testloader, model, criterion, epoch)
 
         acc_ema = 0        
@@ -178,6 +202,7 @@ def train_epochs(optimizer, warmup_len, max_epochs, prefix):
         create_checkpoint(model, model_ema, optimizer,
                           is_best, is_ema_best, best_acc, epoch, ckpt_root, 1, prefix)    
         scheduler.step()  
+        print(f"* epoch time {time.time()-start:1f} s")
     return best_acc
 
 
@@ -290,18 +315,33 @@ if args.pg:
             skip_list_next = []
             for s in sort[int(len(sort) * 1/3):int(len(sort) * 2/3)]:
                 skip_list_next.append(s[0])
-
+            best_acc = 0
             params = categorize_param(model)
             optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
-            train_epochs(optimizer, args.warmup, args.ft_epoch, prefix + "_ft1")
+            best_candi=train_epochs(optimizer, args.warmup, args.ft_epoch, prefix + "_ft1")
+            best_acc = max(best_acc, best_candi)
 
             params = categorize_param(model, skip_list)
             optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
-            train_epochs(optimizer, args.warmup, args.ft_epoch, prefix + "_ft2")
+            best_candi=train_epochs(optimizer, args.warmup, args.ft_epoch, prefix + "_ft2")
+            best_acc = max(best_acc, best_candi)
 
             params = categorize_param(model, skip_list + skip_list_next)
             optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
-            train_epochs(optimizer, args.warmup, args.ft_epoch, prefix + "_ft3")
+            best_candi=train_epochs(optimizer, args.warmup, args.ft_epoch, prefix + "_ft3")
+            best_acc = max(best_acc, best_candi)
+
+            if args.unfreezing:
+                params = categorize_param(model, skip_list)
+                optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
+                best_candi=train_epochs(optimizer, args.warmup, args.ft_epoch, prefix + "_ft4")
+                best_acc = max(best_acc, best_candi)
+
+                params = categorize_param(model)
+                optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
+                best_candi=train_epochs(optimizer, args.warmup, args.ft_epoch, prefix + "_ft5")
+                best_acc = max(best_acc, best_candi)
+
 
         else:                     
             print("==> Fine-tuning")
@@ -318,6 +358,9 @@ if args.pg:
 
 else:
     a_bit, w_bit = args.a_bit[0], args.w_bit[0]
+    QuantOps.initialize(model, trainloader, 2**a_bit, act=True)
+    with torch.no_grad():
+        QuantOps.initialize(model, trainloader, 2**w_bit, weight=True)
     prefix = phase_prefix(a_bit, w_bit)
     print("==> Activation and weight quantization, bit %d, %d" % (a_bit, w_bit))
     for name, module in model.named_modules():
