@@ -317,9 +317,17 @@ if args.pg:
     print("==> Finish training.. best accuracy is {}".format(best_acc))
 
 else:
+    a_bit, w_bit = args.a_bit[0], args.w_bit[0]
+    prefix = phase_prefix(a_bit, w_bit)
+    print("==> Activation and weight quantization, bit %d, %d" % (a_bit, w_bit))
     for name, module in model.named_modules():
         if isinstance(module, (QuantOps.ReLU, QuantOps.ReLU6, QuantOps.Sym, QuantOps.HSwish)):
-            module.n_lv = 2 ** args.a_bit[0]
+            module.n_lv = 2 ** a_bit
     for name, module in model.named_modules():
         if isinstance(module, (QuantOps.Conv2d, QuantOps.Conv2dPad, QuantOps.Linear)):
-            module.n_lv = 2 ** args.w_bit[0]
+            module.n_lv = 2 ** w_bit
+
+    params = categorize_param(model)
+    optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
+    train_epochs(optimizer, args.warmup, args.ft_epoch, prefix + "_ft")
+

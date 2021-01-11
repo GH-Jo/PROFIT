@@ -62,7 +62,7 @@ def get_loader(root, test_batch, train_batch, valid_size=0, num_workers=16, rand
                                     std = [ 0.229, 0.224, 0.225 ]),
         ])
 
-        valid_dataset = datasets.ImageFolder(os.path.join(root, "val_pt"), transform_valid)
+        valid_dataset = datasets.ImageFolder(os.path.join(root, "val"), transform_valid)
         valid_sampler =  SubsetRandomSampler(valid_idx) 
         valid_loader = torch.utils.data.DataLoader(
             valid_dataset, batch_size=test_batch, sampler=valid_sampler,
@@ -79,7 +79,7 @@ def get_loader(root, test_batch, train_batch, valid_size=0, num_workers=16, rand
                                     std = [ 0.229, 0.224, 0.225 ]),
         ])
 
-        test_dataset = datasets.ImageFolder(os.path.join(root, "val_pt"), transform_test)
+        test_dataset = datasets.ImageFolder(os.path.join(root, "val"), transform_test)
         test_sampler = SubsetSampler(test_idx)
         test_loader = torch.utils.data.DataLoader(
             test_dataset, batch_size=test_batch, sampler=test_sampler,
