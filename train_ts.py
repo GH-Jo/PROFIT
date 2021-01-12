@@ -88,7 +88,6 @@ elif args.model == "mobilenetv3":
     model.load_state_dict(torch.load("./pretrained/mobilenet_v3_pad.pth"), False)
 else:
     raise NotImplementedError
-print(model)
 
 print("==> Teacher model: %s" % args.teacher)
 if args.teacher == "none":
