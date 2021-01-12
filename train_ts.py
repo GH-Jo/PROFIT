@@ -321,32 +321,36 @@ if args.pg:
             for s in sort[int(len(sort) * 1/3):int(len(sort) * 2/3)]:
                 skip_list_next.append(s[0])
             best_acc = 0
+            print("==> PROFIT 0: None freezed")
             params = categorize_param(model)
             optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
             best_candi=train_epochs(optimizer, args.warmup, args.ft_epoch, prefix + "_ft1")
             best_acc = max(best_acc, best_candi)
 
+            print("==> PROFIT 1: 1st group freezed")
             params = categorize_param(model, skip_list)
             optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
             best_candi=train_epochs(optimizer, args.warmup, args.ft_epoch, prefix + "_ft2")
             best_acc = max(best_acc, best_candi)
 
+            print("==> PROFIT 2: 2nd group freezed")
             params = categorize_param(model, skip_list + skip_list_next)
             optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
             best_candi=train_epochs(optimizer, args.warmup, args.ft_epoch, prefix + "_ft3")
             best_acc = max(best_acc, best_candi)
 
             if args.unfreeze:
+                print("==> PROFIT + unfreeze 1: 2nd group freezed")
                 params = categorize_param(model, skip_list)
                 optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
                 best_candi=train_epochs(optimizer, args.warmup, args.ft_epoch, prefix + "_ft4")
                 best_acc = max(best_acc, best_candi)
 
+                print("==> PROFIT + unfreeze 2: 1st group freezed")
                 params = categorize_param(model)
                 optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
                 best_candi=train_epochs(optimizer, args.warmup, 1, prefix + "_ft5")
                 best_acc = max(best_acc, best_candi)
-
 
         else:                     
             print("==> Fine-tuning")
@@ -375,6 +379,7 @@ else:
         if isinstance(module, (QuantOps.Conv2d, QuantOps.Conv2dPad, QuantOps.Linear)):
             module.n_lv = 2 ** w_bit
 
+    print("==> Fine-tuning")
     params = categorize_param(model)
     optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
     train_epochs(optimizer, args.warmup, args.ft_epoch, prefix + "_ft")
