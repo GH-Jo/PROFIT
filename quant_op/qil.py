@@ -10,6 +10,10 @@ from torch.nn.parameter import Parameter
 import numpy as np 
 from collections import OrderedDict
 
+def nan_detect(x):
+    if x.isnan().any():
+        print(x)
+        raise ValueError
 
 class RoundQuant(torch.autograd.Function):
     @staticmethod
@@ -46,6 +50,7 @@ class Q_ReLU(nn.Module):
             x = x - b 
             x = F.hardtanh(x / a, 0, 1)
             x = RoundQuant.apply(x, self.n_lv) 
+            nan_detect(x)
             return x 
 
         
@@ -148,6 +153,7 @@ class Q_Conv2d(nn.Conv2d):
                 self.stride, self.padding, self.dilation, self.groups)
         else:
             weight = self._weight_quant()
+            nan_detect(weight)
 
             return F.conv2d(x, weight, self.bias,
                 self.stride, self.padding, self.dilation, self.groups)
@@ -177,7 +183,7 @@ class Q_Linear(nn.Linear):
         w_sign = self.weight.sign()
         weight = self.weight - w_sign * b
         weight = (weight / a).abs() ** gamma
-        weight *= w_sign
+        weight = weight * w_sign
         weight = F.hardtanh(weight, -1, 1)
         weight = RoundQuant.apply(weight, self.n_lv // 2) 
         return weight
@@ -187,6 +193,7 @@ class Q_Linear(nn.Linear):
             return F.linear(x, self.weight, self.bias)
         else:
             weight = self._weight_quant()
+            nan_detect(weight)
             return F.linear(x, weight, self.bias)            
 
 
