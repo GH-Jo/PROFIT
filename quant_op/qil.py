@@ -127,18 +127,17 @@ class Q_Conv2d(nn.Conv2d):
         self.gamma = Parameter(torch.Tensor(1))
         self.weight_old = None
 
-    def initialize(self, n_lv):
+    def initialize(self, n_lv, offset, diff):
         self.n_lv = n_lv
-        max_val = self.weight.data.abs().max().item()
-        self.a.data.fill_(np.log(np.exp(max_val * 0.9)-1))
-        self.b.data.fill_(np.log(np.exp(max_val * 0.05)-1))
+        self.a.data.fill_(np.log(np.exp(offset + diff)-1)) 
+        self.b.data.fill_(np.log(np.exp(offset) -1))
         self.gamma.data.fill_(np.log(np.exp(1)-1))  # gamma <- 1
 
     def _weight_quant(self):
         a = F.softplus(self.a)
         b = F.softplus(self.b)
         gamma = F.softplus(self.gamma)
-        
+
         w_sign = self.weight.sign()
         weight = self.weight - w_sign * b
         weight = (weight / a).abs() ** gamma
@@ -168,12 +167,11 @@ class Q_Linear(nn.Linear):
         self.gamma = Parameter(torch.Tensor(1))
         self.weight_old = None
 
-    def initialize(self, n_lv):
+    def initialize(self, n_lv, offset, diff):
         self.n_lv = n_lv
-        max_val = self.weight.data.abs().max().item()
-        self.a.data.fill_(np.log(np.exp(max_val * 0.9)-1))
-        self.b.data.fill_(np.log(np.exp(max_val * 0.05)-1))
-        self.gamma.data.fill_(np.log(np.exp(1)-1))  # gamma <- 1
+        self.a.data.fill_(np.log(np.exp(offset + diff)-1)) 
+        self.b.data.fill_(np.log(np.exp(offset) -1))
+        self.gamma.data.fill_(np.log(np.exp(1)-1))  # gamma <- 
 
     def _weight_quant(self):
         a = F.softplus(self.a)
@@ -224,12 +222,12 @@ class Q_Conv2dPad(Q_Conv2d):
 def initialize(model, loader, n_lv, act=False, weight=False, eps=0.05):
     def initialize_hook(module, input, output):
         print("==> Initialize")
-        if isinstance(module, (Q_ReLU, Q_Sym, Q_HSwish)) and act:
+        if isinstance(module, (Q_ReLU, Q_Sym, Q_Conv2d, Q_Linear, Q_HSwish)):
             if not isinstance(input, torch.Tensor):
                 input = input[0]
             input = input.detach().cpu().numpy()
 
-            if isinstance(input, Q_Sym):
+            if isinstance(input, (Q_Sym, Q_Conv2d, Q_Linear)):
                 input = np.abs(input)
             elif isinstance(input, Q_HSwish):
                 input = input + 3/8
@@ -244,9 +242,6 @@ def initialize(model, loader, n_lv, act=False, weight=False, eps=0.05):
                 small, large = input[int(len(input) * eps)], input[int(len(input) * (1-eps))]
 
             module.initialize(n_lv, small, large - small)
-
-        if isinstance(module, (Q_Conv2d, Q_Linear)) and weight:
-            module.initialize(n_lv)
 
     hooks = []
 

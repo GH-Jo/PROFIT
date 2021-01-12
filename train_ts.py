@@ -28,7 +28,7 @@ parser.add_argument("--data", default="/data/imagenet")
 parser.add_argument("--ckpt", required=True, help="checkpoint directory")
 parser.add_argument("--exp", required=True, help="experiment name")
 
-parser.add_argument("--quant_op", choices=["duq", "qil", "lsq", "duq_wo_scale", "duq_w_offset"])
+parser.add_argument("--quant_op")
 parser.add_argument("--model", choices=["mobilenetv2", "mobilenetv3"])
 parser.add_argument("--teacher", choices=["none", "self", "resnet101"])
 
@@ -72,8 +72,10 @@ elif args.quant_op == 'duq_wo_scale':
     from quant_op.duq_wo_scale import QuantOps
     print("==> differentiable and unified quantization without scale.. ")
 elif args.quant_op == 'duq_w_offset':
-    from quant_op.qil_w_offset import QuantOps
+    from quant_op.duq_w_offset import QuantOps
     print("==> differentiable and unified quantization with offset.. ")
+elif args.quant_op == 'duq_init_change':
+    from quant_op.duq_init_change import QuantOps
 else:
     raise NotImplementedError
 
