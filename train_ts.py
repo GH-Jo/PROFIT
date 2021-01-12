@@ -26,6 +26,7 @@ import time
 parser = argparse.ArgumentParser()
 parser.add_argument("--data", default="/data/imagenet")
 parser.add_argument("--ckpt", required=True, help="checkpoint directory")
+parser.add_argument("--exp", required=True, help="experiment name")
 
 parser.add_argument("--quant_op", choices=["duq", "qil", "lsq"])
 parser.add_argument("--model", choices=["mobilenetv2", "mobilenetv3"])
@@ -163,7 +164,7 @@ def get_optimizer(params, train_quant, train_weight, train_bnbias, lr_decay=1):
 
 
 def phase_prefix(a_bit, w_bit):
-    prefix_base = "ts_%s_%s_%s_" % (args.model, args.teacher, args.quant_op)
+    prefix_base = "%s_%s_%s_%s_" % (args.exp, args.model, args.teacher, args.quant_op)
     return prefix_base + ("ema_" if args.use_ema else "") + ("%d_%d" % (a_bit, w_bit))
 
 
