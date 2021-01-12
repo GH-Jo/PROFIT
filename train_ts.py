@@ -67,9 +67,12 @@ elif args.quant_op == "qil":
 elif args.quant_op == "lsq":
     from quant_op.lsq import QuantOps
     print("==> learning step size method is selected..")
-elif args.quant_op== 'qil_wo_offset':
-    from quant_op.qil_wo_offset import QuantOps
-    print("==> quantization interval learning without offset. ")
+elif args.quant_op == 'duq_wo_scale':
+    from quant_op.duq_wo_scale import QuantOps
+    print("==> differentiable and unified quantization without scale.. ")
+elif args.quant_op == 'duq_w_offset':
+    from quant_op.qil_w_offset import QuantOps
+    print("==> differentiable and unified quantization with offset.. ")
 else:
     raise NotImplementedError
 
