@@ -28,7 +28,7 @@ parser.add_argument("--data", default="/data/imagenet")
 parser.add_argument("--ckpt", required=True, help="checkpoint directory")
 parser.add_argument("--exp", required=True, help="experiment name")
 
-parser.add_argument("--quant_op", choices=["duq", "qil", "lsq"])
+parser.add_argument("--quant_op", choices=["duq", "qil", "lsq", "duq_wo_scale", "duq_w_offset"])
 parser.add_argument("--model", choices=["mobilenetv2", "mobilenetv3"])
 parser.add_argument("--teacher", choices=["none", "self", "resnet101"])
 
