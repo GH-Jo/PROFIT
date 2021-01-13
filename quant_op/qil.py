@@ -32,12 +32,12 @@ class Q_ReLU(nn.Module):
         self.act_func = act_func
         self.inplace = inplace
         self.a = Parameter(torch.Tensor(1))
-        self.b = Parameter(torch.Tensor(1))
+        self.b = Parameter(torch.Tensor(0))
 
     def initialize(self, n_lv, offset, diff):
         self.n_lv = n_lv
         self.a.data.fill_(np.log(np.exp(offset + diff)-1)) # a <- offset + diff (upper 5%)
-        self.b.data.fill_(np.log(np.exp(offset)-1)) # b <- offset (lower 5%)
+        #self.b.data.fill_(np.log(np.exp(offset)-1)) # b <- offset (lower 5%)
     
     def forward(self, x):
         if self.act_func:
@@ -46,7 +46,8 @@ class Q_ReLU(nn.Module):
             return x
         else:
             a = F.softplus(self.a)
-            b = F.softplus(self.b)
+            ##b = F.softplus(self.b)
+            b = self.b
             x = x - b 
             x = F.hardtanh(x / a, 0, 1)
             x = RoundQuant.apply(x, self.n_lv) 
@@ -71,19 +72,20 @@ class Q_Sym(nn.Module):
         super(Q_Sym, self).__init__()
         self.n_lv = 0
         self.a = Parameter(torch.Tensor(1))
-        self.b = Parameter(torch.Tensor(1))
+        self.b = Parameter(torch.Tensor(0))
         
     def initialize(self, n_lv, offset, diff):
         self.n_lv = n_lv
         self.a.data.fill_(np.log(np.exp(offset + diff)-1)) 
-        self.b.data.fill_(np.log(np.exp(offset) -1)) # b <- offset (lower 5%)
+        #self.b.data.fill_(np.log(np.exp(offset) -1)) # b <- offset (lower 5%)
 
     def forward(self, x):
         if self.n_lv == 0:
             return x
         else:
             a = F.softplus(self.a)
-            b = F.softplus(self.b)
+            #b = F.softplus(self.b)
+            b = self.b
             x = x - x.sign() * b
             x = F.hardtanh(x / a, -1, 1)
             x = RoundQuant.apply(x, self.n_lv // 2) 
@@ -96,12 +98,12 @@ class Q_HSwish(nn.Module):
         self.n_lv = 0
         self.act_func = act_func
         self.a = Parameter(torch.Tensor(1))
-        self.b = Parameter(torch.Tensor(1))
+        self.b = Parameter(torch.Tensor(0))
 
     def initialize(self, n_lv, offset, diff):
         self.n_lv = n_lv
         self.a.data.fill_(np.log(np.exp(offset + diff)-1))
-        self.b.data.fill_(np.log(np.exp(offset) -1)) # b <- offset (lower 5%)
+        #self.b.data.fill_(np.log(np.exp(offset) -1)) # b <- offset (lower 5%)
         self.gamma.data.fill_(np.log(np.exp(1)-1))  # gamma <- 1
     
     def forward(self, x):
@@ -123,19 +125,20 @@ class Q_Conv2d(nn.Conv2d):
         super(Q_Conv2d, self).__init__(*args, **kargs)
         self.n_lv = 0
         self.a = Parameter(torch.Tensor(1))
-        self.b = Parameter(torch.Tensor(1))
+        self.b = Parameter(torch.Tensor(0))
         self.gamma = Parameter(torch.Tensor(1))
         self.weight_old = None
 
     def initialize(self, n_lv, offset, diff):
         self.n_lv = n_lv
         self.a.data.fill_(np.log(np.exp(offset + diff)-1)) 
-        self.b.data.fill_(np.log(np.exp(offset) -1))
+        #self.b.data.fill_(np.log(np.exp(offset) -1))
         self.gamma.data.fill_(np.log(np.exp(1)-1))  # gamma <- 1
 
     def _weight_quant(self):
         a = F.softplus(self.a)
-        b = F.softplus(self.b)
+        #b = F.softplus(self.b)
+        b = self.b
         gamma = F.softplus(self.gamma)
 
         w_sign = self.weight.sign()
@@ -163,19 +166,20 @@ class Q_Linear(nn.Linear):
         super(Q_Linear, self).__init__(*args, **kargs)
         self.n_lv = 0
         self.a = Parameter(torch.Tensor(1))
-        self.b = Parameter(torch.Tensor(1))
+        self.b = Parameter(torch.Tensor(0))
         self.gamma = Parameter(torch.Tensor(1))
         self.weight_old = None
 
     def initialize(self, n_lv, offset, diff):
         self.n_lv = n_lv
         self.a.data.fill_(np.log(np.exp(offset + diff)-1)) 
-        self.b.data.fill_(np.log(np.exp(offset) -1))
+        #self.b.data.fill_(np.log(np.exp(offset) -1))
         self.gamma.data.fill_(np.log(np.exp(1)-1))  # gamma <- 
 
     def _weight_quant(self):
         a = F.softplus(self.a)
-        b = F.softplus(self.b)
+        #b = F.softplus(self.b)
+        b = self.b
         gamma = F.softplus(self.gamma)
 
         w_sign = self.weight.sign()
