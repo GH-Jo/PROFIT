@@ -32,7 +32,7 @@ class Q_ReLU(nn.Module):
         self.act_func = act_func
         self.inplace = inplace
         self.a = Parameter(torch.Tensor(1))
-        self.b = Parameter(torch.Tensor(0))
+        self.b = Parameter(torch.Tensor([0]))
 
     def initialize(self, n_lv, offset, diff):
         self.n_lv = n_lv
@@ -72,7 +72,7 @@ class Q_Sym(nn.Module):
         super(Q_Sym, self).__init__()
         self.n_lv = 0
         self.a = Parameter(torch.Tensor(1))
-        self.b = Parameter(torch.Tensor(0))
+        self.b = Parameter(torch.Tensor([0]))
         
     def initialize(self, n_lv, offset, diff):
         self.n_lv = n_lv
@@ -98,7 +98,7 @@ class Q_HSwish(nn.Module):
         self.n_lv = 0
         self.act_func = act_func
         self.a = Parameter(torch.Tensor(1))
-        self.b = Parameter(torch.Tensor(0))
+        self.b = Parameter(torch.Tensor([0]))
 
     def initialize(self, n_lv, offset, diff):
         self.n_lv = n_lv
@@ -125,7 +125,7 @@ class Q_Conv2d(nn.Conv2d):
         super(Q_Conv2d, self).__init__(*args, **kargs)
         self.n_lv = 0
         self.a = Parameter(torch.Tensor(1))
-        self.b = Parameter(torch.Tensor(0))
+        self.b = Parameter(torch.Tensor([0]))
         self.gamma = Parameter(torch.Tensor(1))
         self.weight_old = None
 
@@ -166,7 +166,7 @@ class Q_Linear(nn.Linear):
         super(Q_Linear, self).__init__(*args, **kargs)
         self.n_lv = 0
         self.a = Parameter(torch.Tensor(1))
-        self.b = Parameter(torch.Tensor(0))
+        self.b = Parameter(torch.Tensor([0]))
         self.gamma = Parameter(torch.Tensor(1))
         self.weight_old = None
 

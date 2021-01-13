@@ -53,7 +53,7 @@ def get_loader(root, test_batch, train_batch, valid_size=0, num_workers=16, rand
         train_loader = None
     
     if valid_size > 0:
-        assert(test_batch > 0, "validation set follows the batch size of test set, which is 0")
+        assert test_batch > 0, "validation set follows the batch size of test set, which is 0"
         transform_valid = transforms.Compose([
             transforms.Resize(256, interpolation=PIL.Image.BICUBIC),
             transforms.CenterCrop(224),
