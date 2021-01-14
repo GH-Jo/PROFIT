@@ -39,6 +39,7 @@ parser.add_argument("--warmup", default=3, type=int)
 parser.add_argument("--bn_epoch", default=5, type=int)
 parser.add_argument("--ft_epoch", default=15, type=int)
 parser.add_argument("--sample_epoch", default=5, type=int)
+parser.add_argument("--seed", default=7, type=int)
 
 parser.add_argument("--use_ema", action="store_true", default=False)
 parser.add_argument("--stabilize", action="store_true", default=False)
@@ -56,7 +57,7 @@ use_cuda = torch.cuda.is_available()
 
 print("==> Prepare data..")
 from my_lib.imagenet import get_loader
-testloader, trainloader, _ = get_loader(data_root, test_batch=128, train_batch=128,)
+testloader, trainloader, _ = get_loader(data_root, test_batch=128, train_batch=128, random_seed=args.seed)
 
 if args.quant_op == "duq":
     from quant_op.duq import QuantOps

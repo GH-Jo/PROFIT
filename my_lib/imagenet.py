@@ -29,7 +29,7 @@ class SubsetSampler(Sampler):
         return len(self.indices)
 
 
-def get_loader(root, test_batch, train_batch, valid_size=0, num_workers=16, random_seed=12345):
+def get_loader(root, test_batch, train_batch, valid_size=0, num_workers=16, random_seed=None):
     indices = list(range(50000))
     np.random.seed(random_seed)
     np.random.shuffle(indices)            
