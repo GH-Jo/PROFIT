@@ -22,11 +22,13 @@ from my_lib.train_test import (
 )
 import pickle
 import time
+import random
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--data", default="/data/imagenet")
 parser.add_argument("--ckpt", required=True, help="checkpoint directory")
 parser.add_argument("--exp", required=True, help="experiment name")
+parser.add_argument("--seed", default=7, type=int)
 
 parser.add_argument("--quant_op")
 parser.add_argument("--model", choices=["mobilenetv2", "mobilenetv3"])
@@ -39,7 +41,6 @@ parser.add_argument("--warmup", default=3, type=int)
 parser.add_argument("--bn_epoch", default=5, type=int)
 parser.add_argument("--ft_epoch", default=15, type=int)
 parser.add_argument("--sample_epoch", default=5, type=int)
-parser.add_argument("--seed", default=7, type=int)
 
 parser.add_argument("--use_ema", action="store_true", default=False)
 parser.add_argument("--stabilize", action="store_true", default=False)
@@ -55,9 +56,18 @@ ckpt_root = args.ckpt   # "/home/eunhyeokpark/cifar10/"
 data_root = args.data  # "/home/eunhyeokpark/cifar10/"
 use_cuda = torch.cuda.is_available()
 
+random_seed = args.seed
+torch.manual_seed(random_seed)
+torch.cuda.manual_seed(random_seed)
+torch.cuda.manual_seed_all(random_seed) # if use multi-GPU
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+np.random.seed(random_seed)
+random.seed(random_seed)
+
 print("==> Prepare data..")
 from my_lib.imagenet import get_loader
-testloader, trainloader, _ = get_loader(data_root, test_batch=128, train_batch=128, random_seed=args.seed)
+testloader, trainloader, _ = get_loader(data_root, test_batch=128, train_batch=128, random_seed=random_seed)
 
 if args.quant_op == "duq":
     from quant_op.duq import QuantOps
