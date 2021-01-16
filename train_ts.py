@@ -60,8 +60,8 @@ random_seed = args.seed
 torch.manual_seed(random_seed)
 torch.cuda.manual_seed(random_seed)
 torch.cuda.manual_seed_all(random_seed) # if use multi-GPU
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = False
+#torch.backends.cudnn.deterministic = True
+#torch.backends.cudnn.benchmark = False
 np.random.seed(random_seed)
 random.seed(random_seed)
 
@@ -128,7 +128,7 @@ if use_cuda:
     if model_t is not None:
         model_t.cuda()
         model_t = torch.nn.DataParallel(model_t, device_ids=range(torch.cuda.device_count()))
-
+    
     if model_ema is not None:
         model_ema.cuda()
         model_ema = torch.nn.DataParallel(model_ema, device_ids=range(torch.cuda.device_count()))
