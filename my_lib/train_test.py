@@ -260,7 +260,7 @@ def train_ts(train_loader, model, model_ema, model_t, criterion, optimizer, epoc
                     hooks.append(module.register_forward_hook(forward_hook)) 
 
         # compute output
-        try: 
+        if True: 
             output = model(input_var)
             for hook in hooks:
                 hook.remove()
@@ -297,15 +297,15 @@ def train_ts(train_loader, model, model_ema, model_t, criterion, optimizer, epoc
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-        except:
-            if isinstance(model, torch.nn.DataParallel):
-                model_state = model.module.state_dict()
-            else:
-                model_state = model.state_dict()
-            os.makedirs('./debug', exist_ok=True)
-            save_name = './debug/' + time.strftime("%y%m%d-%H%M_") + 'error.pth'
-            torch.save(model_state, save_name)
-            exit()
+        #except:
+        #    if isinstance(model, torch.nn.DataParallel):
+        #        model_state = model.module.state_dict()
+        #    else:
+        #        model_state = model.state_dict()
+        #    os.makedirs('./debug', exist_ok=True)
+        #    save_name = './debug/' + time.strftime("%y%m%d-%H%M_") + 'error.pth'
+        #    torch.save(model_state, save_name)
+        #    exit()
 
         # implementation of weight exponential moving-average 
         if model_ema is not None:

@@ -29,6 +29,7 @@ parser.add_argument("--data", default="/data/imagenet")
 parser.add_argument("--ckpt", required=True, help="checkpoint directory")
 parser.add_argument("--exp", required=True, help="experiment name")
 parser.add_argument("--seed", default=7, type=int)
+parser.add_argument("--pretrain", action="store_true")
 
 parser.add_argument("--quant_op")
 parser.add_argument("--model", choices=["mobilenetv2", "mobilenetv3"])
@@ -50,6 +51,7 @@ parser.add_argument("--a_bit", required=True, type=int, nargs="+")
 parser.add_argument("--w_profit", required=True, type=int, nargs="+")
 parser.add_argument("--pg", action="store_true")
 parser.add_argument("--unfreeze", action="store_true")
+parser.add_argument("--batchsize", default=128, type=int)
 
 args = parser.parse_args()
 ckpt_root = args.ckpt   # "/home/eunhyeokpark/cifar10/"
@@ -67,7 +69,7 @@ random.seed(random_seed)
 
 print("==> Prepare data..")
 from my_lib.imagenet import get_loader
-testloader, trainloader, _ = get_loader(data_root, test_batch=128, train_batch=128, random_seed=random_seed)
+testloader, trainloader, _ = get_loader(data_root, test_batch=args.batchsize, train_batch=args.batchsize, random_seed=random_seed)
 
 if args.quant_op == "duq":
     from quant_op.duq import QuantOps
@@ -87,6 +89,9 @@ elif args.quant_op == 'duq_w_offset':
     print("==> differentiable and unified quantization with offset.. ")
 elif args.quant_op == 'duq_init_change':
     from quant_op.duq_init_change import QuantOps
+elif args.quant_op == 'duq_lsq':
+    from quant_op.duq_lsq import QuantOps
+    print("==> duq_lsq : quantizer + grad_scale..")
 else:
     raise NotImplementedError
 
@@ -98,7 +103,8 @@ if args.model == "mobilenetv2":
 elif args.model == "mobilenetv3":
     from conv_model.ilsvrc.MobileNetV3Large_pad_quant import MobileNetV3Large
     model = MobileNetV3Large(QuantOps)
-    model.load_state_dict(torch.load("./pretrained/mobilenet_v3_pad.pth"), False)
+    if not args.pretrain:
+        model.load_state_dict(torch.load("./pretrained/mobilenet_v3_pad.pth"), False)
 else:
     raise NotImplementedError
 
@@ -168,7 +174,7 @@ def get_optimizer(params, train_quant, train_weight, train_bnbias, lr_decay=1):
     (quant, skip, weight, bnbias) = params
     optimizer = optim.SGD([
         {'params': skip, 'weight_decay': 0, 'lr': 0},
-        {'params': quant, 'weight_decay': 0., 'lr': args.lr * 1e-2 * lr_decay if train_quant else 0},
+        {'params': quant, 'weight_decay': 0., 'lr': args.lr * lr_decay if train_quant else 0}, # remove "*1e-2"
         {'params': bnbias, 'weight_decay': 0., 'lr': args.lr * lr_decay if train_bnbias else 0},
         {'params': weight, 'weight_decay': args.decay, 'lr': args.lr * lr_decay if train_weight else 0},
     ], momentum=0.9, nesterov=True)
@@ -189,17 +195,17 @@ def train_epochs(optimizer, warmup_len, max_epochs, prefix):
                         
     for epoch in range(last_epoch+1, max_epochs):
         start = time.time()
-        try:
-            train_ts(trainloader, model, model_ema, model_t, criterion, optimizer, epoch)
-        except:
-            if isinstance(model, torch.nn.DataParallel):
-                model_state = model.module.state_dict()
-            else:
-                model_state = model.state_dict()
-            os.makedirs('./debug', exist_ok=True)
-            save_name = './debug/' + time.strftime("%y%m%d-%H%M_") + 'error.pth'
-            torch.save(model_state, save_name)
-            exit()
+        #try:
+        train_ts(trainloader, model, model_ema, model_t, criterion, optimizer, epoch)
+        #except:
+        #    if isinstance(model, torch.nn.DataParallel):
+        #        model_state = model.module.state_dict()
+        #    else:
+        #        model_state = model.state_dict()
+        #    os.makedirs('./debug', exist_ok=True)
+        #    save_name = './debug/' + time.strftime("%y%m%d-%H%M_") + 'error.pth'
+        #    torch.save(model_state, save_name)
+        #    exit()
         acc_base = test(testloader, model, criterion, epoch)
 
         acc_ema = 0        
@@ -224,6 +230,15 @@ def train_epochs(optimizer, warmup_len, max_epochs, prefix):
 
 # full-precision teacher-student boosting
 a_bit, w_bit = 32, 32
+
+if args.pretrain:
+    prefix = phase_prefix(a_bit, w_bit)
+    print("==> Full precision pretraining")
+    params = categorize_param(model)
+    optimizer = get_optimizer(params, train_quant=False, train_weight=True, train_bnbias=True)    
+    train_epochs(optimizer, args.warmup, args.ft_epoch, prefix)
+    exit()
+
 
 if args.teacher != "none": # full-precision fine-tuning with teacher-student
     prefix = phase_prefix(a_bit, w_bit)
