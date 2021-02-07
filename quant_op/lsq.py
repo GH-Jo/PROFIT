@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 import numpy as np 
 from collections import OrderedDict
-
+import math
 
 class RoundQuant(torch.autograd.Function):
     @staticmethod
@@ -19,6 +19,12 @@ class RoundQuant(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         return grad_output, None
+
+# LSQ
+def grad_scale(x, scale):
+    yOut = x
+    yGrad = x * scale
+    return (yOut-yGrad).detach() + yGrad
 
 
 class Q_ReLU(nn.Module):
@@ -40,7 +46,8 @@ class Q_ReLU(nn.Module):
         if self.n_lv == 0:
             return x
         else:
-            a = F.softplus(self.a)
+            g = 1.0 / math.sqrt(x.numel() * self.n_lv)
+            a = F.softplus(grad_scale(self.a, g))
             x = F.hardtanh(x / a, 0, 1)
             x = RoundQuant.apply(x, self.n_lv) * a
             return x 
@@ -72,7 +79,8 @@ class Q_Sym(nn.Module):
         if self.n_lv == 0:
             return x
         else:
-            a = F.softplus(self.a)
+            g = 1.0 / math.sqrt(x.numel() * self.n_lv)
+            a = F.softplus(grad_scale(self.a, g))
             x = F.hardtanh(x / a, -1, 1)
             x = RoundQuant.apply(x, self.n_lv // 2) * a
             return x 
@@ -118,7 +126,8 @@ class Q_Conv2d(nn.Conv2d):
         self.a.data.fill_(np.log(np.exp(max_val * 0.9)-1))
 
     def _weight_quant(self):
-        a = F.softplus(self.a)
+        g = 1.0 / math.sqrt(self.weight.numel() * self.n_lv)
+        a = F.softplus(grad_scale(self.a, g))
         weight = F.hardtanh(self.weight / a, -1, 1)
         weight = RoundQuant.apply(weight, self.n_lv // 2) * a
         return weight
@@ -147,7 +156,8 @@ class Q_Linear(nn.Linear):
         self.a.data.fill_(np.log(np.exp(max_val * 0.9)-1))
 
     def _weight_quant(self):
-        a = F.softplus(self.a)
+        g = 1.0 / math.sqrt(self.weight.numel() * self.n_lv)
+        a = F.softplus(grad_scale(self.a, g))
         weight = F.hardtanh(self.weight / a, -1, 1)
         weight = RoundQuant.apply(weight, self.n_lv // 2) * a
         return weight
@@ -218,13 +228,12 @@ def initialize(model, loader, n_lv, act=False, weight=False, eps=0.05):
 
     
     model.train()
-    model.cpu()
     for i, (input, target) in enumerate(loader):
         with torch.no_grad():
             if isinstance(model, nn.DataParallel):
-                output = model.module(input)
+                output = model.module(input.cuda())
             else:
-                output = model(input)
+                output = model(input.cuda())
         break
     
     model.cuda()
