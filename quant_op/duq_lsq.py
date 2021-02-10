@@ -40,6 +40,7 @@ class Q_ReLU(nn.Module):
         self.n_lv = n_lv
         self.a.data.fill_(np.log(np.exp(offset + diff)-1))
         self.c.data.fill_(np.log(np.exp(offset + diff)-1))
+        self.q_p = self.n_lv - 1
     
     def forward(self, x):
         if self.act_func:
@@ -48,7 +49,7 @@ class Q_ReLU(nn.Module):
         if self.n_lv == 0:
             return x
         else:
-            g = 1.0 / math.sqrt(x.numel() * self.n_lv)
+            g = 1.0 / math.sqrt(x.numel() * self.q_p)
             a = F.softplus(grad_scale(self.a, g))
             c = F.softplus(grad_scale(self.c, g))
             x = F.hardtanh(x / a, 0, 1)
@@ -68,6 +69,7 @@ class Q_ReLU6(Q_ReLU):
         else:
             self.a.data.fill_(np.log(np.exp(offset + diff)-1))
             self.c.data.fill_(np.log(np.exp(offset + diff)-1))
+        self.q_p = self.n_lv -1
 
 
 class Q_Sym(nn.Module):
@@ -81,12 +83,13 @@ class Q_Sym(nn.Module):
         self.n_lv = n_lv
         self.a.data.fill_(np.log(np.exp(offset + diff)-1))
         self.c.data.fill_(np.log(np.exp(offset + diff)-1))
+        self.q_p = (self.n_lv // 2) - 1
     
     def forward(self, x):
         if self.n_lv == 0:
             return x
         else:
-            g = 1.0 / math.sqrt(x.numel() * self.n_lv)
+            g = 1.0 / math.sqrt(x.numel() * self.q_p)
             a = F.softplus(grad_scale(self.a, g))
             c = F.softplus(grad_scale(self.c, g))
 
@@ -139,9 +142,10 @@ class Q_Conv2d(nn.Conv2d):
         max_val = self.weight.data.abs().max().item()
         self.a.data.fill_(np.log(np.exp(max_val * 0.9)-1))
         self.c.data.fill_(np.log(np.exp(max_val * 0.9)-1))
+        self.q_p = (self.n_lv // 2) - 1
 
     def _weight_quant(self):
-        g = 1.0 / math.sqrt(self.weight.numel() * self.n_lv)
+        g = 1.0 / math.sqrt(self.weight.numel() * self.q_p)
         a = F.softplus(grad_scale(self.a, g))
         c = F.softplus(grad_scale(self.c, g))
 
@@ -173,9 +177,10 @@ class Q_Linear(nn.Linear):
         max_val = self.weight.data.abs().max().item()
         self.a.data.fill_(np.log(np.exp(max_val * 0.9)-1))
         self.c.data.fill_(np.log(np.exp(max_val * 0.9)-1))
+        self.q_p = (self.n_lv // 2) - 1
 
     def _weight_quant(self):
-        g = 1.0 / math.sqrt(self.weight.numel() * self.n_lv)
+        g = 1.0 / math.sqrt(self.weight.numel() * self.q_p)
         a = F.softplus(grad_scale(self.a, g))
         c = F.softplus(grad_scale(self.c, g))
 

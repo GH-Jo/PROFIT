@@ -38,15 +38,15 @@ class Q_ReLU(nn.Module):
     def initialize(self, n_lv, offset, diff):
         self.n_lv = n_lv
         self.a.data.fill_(np.log(np.exp(offset + diff)-1))
-
-    
+        self.q_p = self.n_lv - 1
+   
     def forward(self, x):
         if self.act_func:
             x = F.relu(x, self.inplace)
         if self.n_lv == 0:
             return x
         else:
-            g = 1.0 / math.sqrt(x.numel() * self.n_lv)
+            g = 1.0 / math.sqrt(x.numel() * self.q_p)
             a = F.softplus(grad_scale(self.a, g))
             x = F.hardtanh(x / a, 0, 1)
             x = RoundQuant.apply(x, self.n_lv) * a
@@ -63,6 +63,7 @@ class Q_ReLU6(Q_ReLU):
             self.a.data.fill_(np.log(np.exp(6)-1))
         else:
             self.a.data.fill_(np.log(np.exp(offset + diff)-1))
+        self.q_p = self.n_lv -1
 
 
 class Q_Sym(nn.Module):
@@ -74,12 +75,13 @@ class Q_Sym(nn.Module):
     def initialize(self, n_lv, offset, diff):
         self.n_lv = n_lv
         self.a.data.fill_(np.log(np.exp(offset + diff)-1))
+        self.q_p = (self.n_lv // 2) - 1
     
     def forward(self, x):
         if self.n_lv == 0:
             return x
         else:
-            g = 1.0 / math.sqrt(x.numel() * self.n_lv)
+            g = 1.0 / math.sqrt(x.numel() * self.q_p)
             a = F.softplus(grad_scale(self.a, g))
             x = F.hardtanh(x / a, -1, 1)
             x = RoundQuant.apply(x, self.n_lv // 2) * a
@@ -124,10 +126,12 @@ class Q_Conv2d(nn.Conv2d):
         self.n_lv = n_lv
         max_val = self.weight.data.abs().max().item()
         self.a.data.fill_(np.log(np.exp(max_val * 0.9)-1))
+        self.q_p = (self.n_lv // 2) - 1
 
     def _weight_quant(self):
-        g = 1.0 / math.sqrt(self.weight.numel() * self.n_lv)
+        g = 1.0 / math.sqrt(self.weight.numel() * self.q_p)
         a = F.softplus(grad_scale(self.a, g))
+        
         weight = F.hardtanh(self.weight / a, -1, 1)
         weight = RoundQuant.apply(weight, self.n_lv // 2) * a
         return weight
@@ -154,10 +158,12 @@ class Q_Linear(nn.Linear):
         self.n_lv = n_lv
         max_val = self.weight.data.abs().max().item()
         self.a.data.fill_(np.log(np.exp(max_val * 0.9)-1))
+        self.q_p = (self.n_lv // 2) - 1
 
     def _weight_quant(self):
-        g = 1.0 / math.sqrt(self.weight.numel() * self.n_lv)
+        g = 1.0 / math.sqrt(self.weight.numel() * self.q_p)
         a = F.softplus(grad_scale(self.a, g))
+        
         weight = F.hardtanh(self.weight / a, -1, 1)
         weight = RoundQuant.apply(weight, self.n_lv // 2) * a
         return weight
