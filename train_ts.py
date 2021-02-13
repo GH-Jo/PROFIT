@@ -48,7 +48,7 @@ parser.add_argument("--stabilize", action="store_true", default=False)
 
 parser.add_argument("--w_bit", required=True, type=int, nargs="+")
 parser.add_argument("--a_bit", required=True, type=int, nargs="+")
-parser.add_argument("--w_profit", required=True, type=int, nargs="+")
+parser.add_argument("--w_profit", default=[], type=int, nargs="+")
 parser.add_argument("--pg", action="store_true")
 parser.add_argument("--unfreeze", action="store_true")
 parser.add_argument("--batchsize", default=64, type=int)
