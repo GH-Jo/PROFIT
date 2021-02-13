@@ -26,22 +26,22 @@ import random
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--data", default="/data/imagenet")
-parser.add_argument("--ckpt", required=True, help="checkpoint directory")
+parser.add_argument("--ckpt", default="./checkpoint/mobilenetv2", help="checkpoint directory")
 parser.add_argument("--exp", required=True, help="experiment name")
 parser.add_argument("--seed", default=7, type=int)
 parser.add_argument("--pretrain", action="store_true")
 
 parser.add_argument("--quant_op")
-parser.add_argument("--model", choices=["mobilenetv2", "mobilenetv3"])
-parser.add_argument("--teacher", choices=["none", "self", "resnet101"])
+parser.add_argument("--model", default="mobilenetv2", choices=["mobilenetv2", "mobilenetv3"])
+parser.add_argument("--teacher", default="none", choices=["none", "self", "resnet101"])
 
 parser.add_argument("--lr", default=0.04, type=float)
-parser.add_argument("--decay", default=2e-5, type=float)
+parser.add_argument("--decay", default=4e-5, type=float)
 
-parser.add_argument("--warmup", default=3, type=int)
-parser.add_argument("--bn_epoch", default=5, type=int)
+parser.add_argument("--warmup", default=0, type=int)
+parser.add_argument("--bn_epoch", default=0, type=int)
 parser.add_argument("--ft_epoch", default=15, type=int)
-parser.add_argument("--sample_epoch", default=5, type=int)
+parser.add_argument("--sample_epoch", default=0, type=int)
 
 parser.add_argument("--use_ema", action="store_true", default=False)
 parser.add_argument("--stabilize", action="store_true", default=False)
@@ -51,7 +51,7 @@ parser.add_argument("--a_bit", required=True, type=int, nargs="+")
 parser.add_argument("--w_profit", required=True, type=int, nargs="+")
 parser.add_argument("--pg", action="store_true")
 parser.add_argument("--unfreeze", action="store_true")
-parser.add_argument("--batchsize", default=128, type=int)
+parser.add_argument("--batchsize", default=64, type=int)
 
 args = parser.parse_args()
 ckpt_root = args.ckpt   # "/home/eunhyeokpark/cifar10/"
