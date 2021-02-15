@@ -27,11 +27,6 @@ def grad_scale(x, scale):
     return (yOut-yGrad).detach() + yGrad
 
 
-##########################################################
-# TODO: from clip from q_n to q_p  (rather than -1 to 1) #
-##########################################################
-
-
 class Q_ReLU(nn.Module):
     def __init__(self, act_func=True, inplace=False):
         super(Q_ReLU, self).__init__()

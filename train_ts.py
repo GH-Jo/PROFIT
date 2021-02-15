@@ -78,8 +78,13 @@ elif args.quant_op == "qil":
     torch.autograd.set_detect_anomaly(True)
     from quant_op.qil import QuantOps 
     print("==> quantization interval learning method is selected..")
+
 elif args.quant_op == "lsq":
     from quant_op.lsq import QuantOps
+
+elif args.quant_op == "softlsq":
+    from quant_op.softlsq import QuantOps
+
     print("==> learning step size method is selected..")
 elif args.quant_op == 'duq_wo_scale':
     from quant_op.duq_wo_scale import QuantOps
