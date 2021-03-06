@@ -258,7 +258,7 @@ if args.pg:
     print("==> initialize activation bitwidth..")
     QuantOps.initialize(model, trainloader, 2**args.a_bit[0], act=True)
     print("==> initialize weight bitwidth..")
-    QuantOps.initialize(model, trainloader, 2**args.w_bit[0], act=True)
+    QuantOps.initialize(model, trainloader, 2**args.w_bit[0], weight=True)
 
     for i in range(len(args.a_bit)):
         print(f"Training stage {i}/{len(args.a_bit)-1} start")
