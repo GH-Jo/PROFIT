@@ -74,24 +74,29 @@ testloader, trainloader, _ = get_loader(data_root, test_batch=args.batchsize, tr
 if args.quant_op == "duq":
     from quant_op.duq import QuantOps
     print("==> differentiable and unified quantization method is selected..")
-    '''elif args.quant_op == "qil":
-        torch.autograd.set_detect_anomaly(True)
-        from quant_op.qil import QuantOps 
-        print("==> quantization interval learning method is selected..")
-    elif args.quant_op == "lsq":
-        from quant_op.lsq import QuantOps
-        print("==> learning step size method is selected..")
-    elif args.quant_op == 'duq_wo_scale':
-        from quant_op.duq_wo_scale import QuantOps
-        print("==> differentiable and unified quantization without scale.. ")
-    elif args.quant_op == 'duq_w_offset':
-        from quant_op.duq_w_offset import QuantOps
-        print("==> differentiable and unified quantization with offset.. ")
-    elif args.quant_op == 'duq_init_change':
-        from quant_op.duq_init_change import QuantOps
-    elif args.quant_op == 'duq_lsq':
-        from quant_op.duq_lsq import QuantOps
-        print("==> duq_lsq : quantizer + grad_scale..")'''
+elif args.quant_op == "qil":
+    torch.autograd.set_detect_anomaly(True)
+    from quant_op.qil import QuantOps 
+    print("==> quantization interval learning method is selected..")
+
+elif args.quant_op == "lsq":
+    from quant_op.lsq import QuantOps
+
+elif args.quant_op == "softlsq":
+    from quant_op.softlsq import QuantOps
+
+    print("==> learning step size method is selected..")
+elif args.quant_op == 'duq_wo_scale':
+    from quant_op.duq_wo_scale import QuantOps
+    print("==> differentiable and unified quantization without scale.. ")
+elif args.quant_op == 'duq_w_offset':
+    from quant_op.duq_w_offset import QuantOps
+    print("==> differentiable and unified quantization with offset.. ")
+elif args.quant_op == 'duq_init_change':
+    from quant_op.duq_init_change import QuantOps
+elif args.quant_op == 'duq_lsq':
+    from quant_op.duq_lsq import QuantOps
+    print("==> duq_lsq : quantizer + grad_scale..")
 else:
     raise NotImplementedError
 
