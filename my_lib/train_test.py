@@ -90,7 +90,7 @@ def create_checkpoint(model, model_ema, optimizer, is_best, is_ema_best,
     if is_ema_best:        
         torch.save(model_ema_state, bestname)
         
-    if epoch > 0 and (epoch % save_freq) == 0:
+    if (epoch % save_freq) == 0:
         state = {
             'model': model_state,
             'model_ema': model_ema_state,
