@@ -14,7 +14,7 @@ import collections
 import numpy as np 
 import pathlib
 import math
-_print_freq = 50
+_print_freq = 100
 _temp_dir = tempfile.mkdtemp()
 
 

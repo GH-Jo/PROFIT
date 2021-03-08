@@ -261,7 +261,8 @@ if args.pg:
     QuantOps.initialize(model, trainloader, 2**args.w_bit[0], weight=True)
 
     for i in range(len(args.a_bit)):
-        print(f"Training stage {i}/{len(args.a_bit)-1} start")
+        best_acc = 0
+        print(f"Training stage {i+1}/{len(args.a_bit)} start")
         a_bit = args.a_bit[i]
         w_bit = args.w_bit[i]
         prefix = phase_prefix(a_bit, w_bit)
@@ -276,8 +277,9 @@ if args.pg:
         print("==> Fine-tuning")
         params = categorize_param(model)
         optimizer = get_optimizer(params, train_quant=True, train_weight=True, train_bnbias=True) 
-        train_epochs(optimizer, args.warmup, args.ft_epoch, prefix)
-        print(f"Training stage {i}/{len(args.a_bit)} done")
+        best_candi = train_epochs(optimizer, args.warmup, args.ft_epoch, prefix)
+        best_acc = max(best_acc, best_candi)
+        print(f"Training stage {i+1}/{len(args.a_bit)} done")
 
     print("==> Finish training.. best accuracy is {}".format(best_acc))        
         
