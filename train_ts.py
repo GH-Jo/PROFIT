@@ -36,6 +36,8 @@ parser.add_argument("--model", default="mobilenetv2", choices=["mobilenetv2", "m
 parser.add_argument("--teacher", default="none", choices=["none", "self", "resnet101"])
 
 parser.add_argument("--lr", default=0.04, type=float)
+parser.add_argument("--lr_quant", default=0, type=float)
+parser.add_argument("--lr_bn", default=0, type=float)
 parser.add_argument("--decay", default=4e-5, type=float)
 
 parser.add_argument("--warmup", default=0, type=int)
@@ -54,6 +56,9 @@ parser.add_argument("--unfreeze", action="store_true")
 parser.add_argument("--batchsize", default=64, type=int)
 
 args = parser.parse_args()
+args.lr_quant = args.lr if args.lr_quant == 0 else args.lr_quant
+args.lr_bn = args.lr if args.lr_bn == 0 else args.lr_bn
+
 ckpt_root = args.ckpt   # "/home/eunhyeokpark/cifar10/"
 data_root = args.data  # "/home/eunhyeokpark/cifar10/"
 use_cuda = torch.cuda.is_available()
@@ -179,8 +184,8 @@ def get_optimizer(params, train_quant, train_weight, train_bnbias, lr_decay=1):
     (quant, skip, weight, bnbias) = params
     optimizer = optim.SGD([
         {'params': skip, 'weight_decay': 0, 'lr': 0},
-        {'params': quant, 'weight_decay': 0., 'lr': args.lr * lr_decay if train_quant else 0}, # remove "*1e-2"
-        {'params': bnbias, 'weight_decay': 0., 'lr': args.lr * lr_decay if train_bnbias else 0},
+        {'params': quant, 'weight_decay': 0., 'lr': args.lr_quant * lr_decay if train_quant else 0}, # remove "*1e-2"
+        {'params': bnbias, 'weight_decay': 0., 'lr': args.lr_bn * lr_decay if train_bnbias else 0},
         {'params': weight, 'weight_decay': args.decay, 'lr': args.lr * lr_decay if train_weight else 0},
     ], momentum=0.9, nesterov=True)
     return optimizer
